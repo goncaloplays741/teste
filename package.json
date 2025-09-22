@@ -1,7 +1,7 @@
 {
-  "name": "Minecraft Afk Bot",
+  "name": "minecraft-afk-bot",
   "version": "2.1",
-  "description": "Afk bot for Minecraft servers.",
+  "description": "Afk bot for Minecraft servers compatible with Node 18.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -10,9 +10,9 @@
   "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",
-    "mineflayer": "^4.4.0",
-    "mineflayer-pathfinder": "^2.1.1",
-    "minecraft-data": "^2.119.1"
+    "mineflayer": "4.2.0",
+    "mineflayer-pathfinder": "2.0.0",
+    "minecraft-data": "2.119.1"
   },
   "engines": {
     "node": "18.x"

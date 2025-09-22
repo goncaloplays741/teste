@@ -1,59 +1,46 @@
 const mineflayer = require("mineflayer");
-const {
-  pathfinder,
-  Movements,
-  goals: { GoalBlock },
-} = require("mineflayer-pathfinder");
+const { pathfinder, Movements } = require("mineflayer-pathfinder");
 const express = require("express");
 const ngrok = require("ngrok");
 const config = require("./settings.json");
 
+// === Servidor web para manter o bot acordado ===
 const app = express();
-
-// Servidor web para manter o bot acordado
-app.get("/", (req, res) => res.send("Bot AFK online ✅"));
-app.listen(process.env.PORT || 5000, "0.0.0.0", () =>
-  console.log("Servidor web rodando na porta", process.env.PORT || 5000)
+app.get("/", (_, res) => res.send("Bot AFK online ✅"));
+const webPort = process.env.PORT || 5000;
+app.listen(webPort, "0.0.0.0", () =>
+  console.log(`Servidor web rodando na porta ${webPort}`)
 );
 
-// Variáveis globais para cleanup
+// === Variáveis globais ===
 let currentBot = null;
 let reconnectTimeout = null;
 let activeIntervals = [];
 
-// Função para limpar recursos
+// === Funções de gerenciamento ===
 function cleanup() {
-  activeIntervals.forEach((interval) => clearInterval(interval));
+  // Limpar intervals
+  activeIntervals.forEach(clearInterval);
   activeIntervals = [];
 
+  // Limpar timeout de reconexão
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout);
     reconnectTimeout = null;
   }
 
+  // Fechar bot atual
   if (currentBot) {
     currentBot.removeAllListeners();
     try {
       currentBot.quit();
-    } catch (err) {}
+    } catch {}
     currentBot = null;
   }
 }
 
-// Função para criar promise com timeout
-function createTimeoutPromise(promise, timeoutMs = 10000) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Timeout")), timeoutMs)
-    ),
-  ]);
-}
-
-// Função segura para reconectar
 function scheduleReconnect(delay = config.utils["auto-reconnect-delay"] || 5000) {
   if (reconnectTimeout) return;
-
   console.log(`[AfkBot] Reconectando em ${delay / 1000}s...`);
   reconnectTimeout = setTimeout(() => {
     reconnectTimeout = null;
@@ -61,24 +48,38 @@ function scheduleReconnect(delay = config.utils["auto-reconnect-delay"] || 5000)
   }, delay);
 }
 
+function createTimeoutPromise(promise, timeoutMs = 10000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeoutMs)),
+  ]);
+}
+
+// === Criação do bot com ngrok ===
 async function createBot() {
   cleanup();
 
   try {
-    // Conectar via ngrok TCP
+    // Autenticação ngrok (coloca teu token aqui)
+    if (config.ngrokToken) {
+      await ngrok.authtoken(config.ngrokToken);
+    }
+
+    // Criar túnel TCP para o servidor
     const tunnel = await ngrok.connect({
       proto: "tcp",
       addr: config.server.port,
     });
     const [host, port] = tunnel.replace("tcp://", "").split(":");
-    console.log(`[Ngrok] Conexão TCP criada: ${host}:${port}`);
+    console.log(`[Ngrok] Tunnel criado em: ${host}:${port}`);
 
+    // Criar bot
     currentBot = mineflayer.createBot({
       username: config["bot-account"].username,
       password: config["bot-account"].password,
       auth: config["bot-account"].type,
-      host: host, // usa ngrok
-      port: parseInt(port), // porta do túnel
+      host,
+      port: parseInt(port),
       version: config.server.version,
     });
 
@@ -95,10 +96,12 @@ async function createBot() {
 
     bot.settings.colorsEnabled = false;
 
+    // Evento quando o bot entra
     bot.once("spawn", () => {
       console.log(`[AfkBot] Bot entrou no servidor como ${bot.username}`);
     });
 
+    // Reconexão e tratamento de eventos
     bot.on("end", (reason) => {
       console.log(`[AfkBot] Conexão encerrada: ${reason || "Desconhecido"}`);
       if (config.utils["auto-reconnect"]) scheduleReconnect();
@@ -122,18 +125,14 @@ async function createBot() {
   }
 }
 
-// Cleanup graceful no encerramento
-process.on("SIGINT", () => {
-  console.log("\n[AfkBot] Encerrando bot...");
-  cleanup();
-  process.exit(0);
-});
+// === Cleanup em encerramento do processo ===
+["SIGINT", "SIGTERM"].forEach((signal) =>
+  process.on(signal, () => {
+    console.log("\n[AfkBot] Encerrando bot...");
+    cleanup();
+    process.exit(0);
+  })
+);
 
-process.on("SIGTERM", () => {
-  console.log("\n[AfkBot] Encerrando bot...");
-  cleanup();
-  process.exit(0);
-});
-
-// Inicia o bot
+// === Iniciar o bot ===
 createBot();

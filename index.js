@@ -19,17 +19,14 @@ let activeIntervals = [];
 
 // === Funções de gerenciamento ===
 function cleanup() {
-  // Limpar intervals
   activeIntervals.forEach(clearInterval);
   activeIntervals = [];
 
-  // Limpar timeout de reconexão
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout);
     reconnectTimeout = null;
   }
 
-  // Fechar bot atual
   if (currentBot) {
     currentBot.removeAllListeners();
     try {
@@ -55,25 +52,35 @@ function createTimeoutPromise(promise, timeoutMs = 10000) {
   ]);
 }
 
-// === Criação do bot com ngrok ===
+// === Função para iniciar ngrok com retry ===
+async function startNgrok() {
+  if (!config.ngrokToken) throw new Error("Ngrok token não definido!");
+  await ngrok.authtoken(config.ngrokToken);
+
+  for (let i = 0; i < 5; i++) {
+    try {
+      const tunnel = await ngrok.connect({
+        proto: "tcp",
+        addr: config.server.port,
+      });
+      console.log("[Ngrok] Tunnel criado:", tunnel);
+      return tunnel;
+    } catch (err) {
+      console.log(`[Ngrok] Tentativa ${i + 1} falhou, retry em 3s...`);
+      await new Promise(res => setTimeout(res, 3000));
+    }
+  }
+  throw new Error("Ngrok não conseguiu criar túnel após várias tentativas");
+}
+
+// === Criação do bot ===
 async function createBot() {
   cleanup();
 
   try {
-    // Autenticação ngrok (coloca teu token aqui)
-    if (config.ngrokToken) {
-      await ngrok.authtoken(config.ngrokToken);
-    }
-
-    // Criar túnel TCP para o servidor
-    const tunnel = await ngrok.connect({
-      proto: "tcp",
-      addr: config.server.port,
-    });
+    const tunnel = await startNgrok();
     const [host, port] = tunnel.replace("tcp://", "").split(":");
-    console.log(`[Ngrok] Tunnel criado em: ${host}:${port}`);
 
-    // Criar bot
     currentBot = mineflayer.createBot({
       username: config["bot-account"].username,
       password: config["bot-account"].password,

@@ -13,7 +13,7 @@
     "mineflayer": "4.2.0",
     "mineflayer-pathfinder": "2.0.0",
     "minecraft-data": "2.119.1",
-    "ngrok": "^5.3.0"
+    "ngrok": "^4.3.3"
   },
   "engines": {
     "node": "18.x"
